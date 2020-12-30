@@ -2,6 +2,8 @@ library(tidyverse)
 library(ggmap)
 library(leaflet)
 library(dplyr)
+library(stringr)
+library(tidyr) # for replace_na
 
 # filter entries of only asian countries
 aapi_countries <- aapicountries$asian_country
@@ -33,6 +35,21 @@ aapi_only1$County.State <- paste(aapi_only1$County.of.Residence, "County, ", aap
 # merge counties and main aapi file
 temp_finalsheet <- subset ( data.frame ( merge( city_coordinates, aapi_only1, by = c( 'County.State') ) ), select = -c(State.of.Residence, County.of.Residence) )
 
-col_order <- c("County.State", "lon", "lat", "Country.of.Birth", "origin.lon", "origin.lat", "Major.Class.of.Admission", "Admissions")
+# create dataset with geolocations for county.state and country.of.birth for aapi lprtop200 counties
+# col_order <- c("County.State", "lon", "lat", "Country.of.Birth", "origin.lon", "origin.lat", "Major.Class.of.Admission", "Admissions")
 finalsheet <- ( merge( temp_finalsheet, birth_plus_coordinates, by = c( 'Country.of.Birth') ) )
-finalsheet %>% select(County.State, lon, lat, Major.Class.of.Admission, Admissions, Country.of.Birth, origin.lon, origin.lat)
+finalsheet <- finalsheet %>% select(County.State, lon, lat, Major.Class.of.Admission, Admissions, Country.of.Birth, origin.lon, origin.lat)
+colnames(finalsheet) <- c("CountyState", "lon", "lat", "MajorClassAdmission", "Admissions", "CountryofBirth", "originlon", "originlat")
+
+# formatting whitespace
+finalsheet$MajorClassAdmission <- gsub('//s+', '', finalsheet$MajorClassAdmission)
+
+finalsheet$CountyState <- gsub(",\\s", ",", finalsheet$CountyState)
+  
+finalsheet$CountyState <- gsub('Saint', 'St.', finalsheet$CountyState)
+
+# finalsheet$countycode <- ifelse(is.na(match(finalsheet$CountyState, census_GEOID_reference_$NAME)), census_GEOID_reference_$GEOID, "NA")
+# newvar <- merge(finalsheet, census_GEOID_reference_, by.x=c("CountyState"), by.y=c("NAME"))
+newvar <- left_join(finalsheet, census_GEOID_reference_, by=c("CountyState"="NAME"))
+
+write.csv(finalsheet, "finalsheet.csv")
