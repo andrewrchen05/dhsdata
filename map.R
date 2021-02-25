@@ -4,29 +4,54 @@ library(leaflet)
 library(dplyr)
 library(stringr)
 library(tidyr) # for replace_na
+require(fuzzyjoin)
+library(janitor)
 
 # filter entries of only asian countries
 aapi_countries <- aapicountries$asian_country
-aapi_only1 <- lpr_usa_counties_2018_top_200_d[grepl(paste(aapi_countries, collapse="|"), lpr_usa_counties_2018_top_200_d$Country.of.Birth), ]
 
-# create data frame of county and state
-aapicountries_residence <- aapi_only1[, c("County.of.Residence", "State.of.Residence")]
-# data frame of country of origin
-aapicountries_origin <- aapi_only1[, c("Country.of.Birth")]
+index <- 0
+year = 2007
 
-# find unique counties of residence
-unique_aapi_residence <- unique(aapicountries_residence[,c("County.of.Residence", "State.of.Residence")])
-# find unique nations of origin
-unique_aapi_origin <- data.frame( unique( aapi_only1 [, c ("Country.of.Birth") ] ) )
+# import dataframes
 
-# create data frame with county appended to 
-unique_aapi_counties <- data.frame(paste(unique_aapi_residence$County.of.Residence, "County, ", unique_aapi_residence$State.of.Residence ))
+repeat {
+  
+  
+  name = paste("lprusatop200_2007-2019/LPR_USA_Counties_", toString(year), "_Top_200_D.txt", sep = "")
+  
+  temp_year_df = read.delim(name, header = TRUE, stringsAsFactors = FALSE, quote = "", sep = "\t")
+  
+  aapi_only_temp_df <- temp_year_df[grepl(paste(aapi_countries, collapse="|"), temp_year_df$Country.of.Birth), ]
+  
+  # create data frame of county and state
+  aapicountries_residence <- aapi_only_temp_df[, c("County.of.Residence", "State.of.Residence")]
+  # data frame of country of origin
+  aapicountries_origin <- data.frame(aapi_only_temp_df[, c("Country.of.Birth")])
+  
+  # find unique counties of residence
+  unique_aapi_residence <- unique(aapicountries_residence[,c("County.of.Residence", "State.of.Residence")])
+  # find unique nations of origin
+  unique_aapi_origin <- data.frame( unique( aapi_only_temp_df [, c ("Country.of.Birth") ] ) )
+  
+  # create data frame with county appended to 
+  unique_aapi_counties <- data.frame(paste(unique_aapi_residence$County.of.Residence, "County, ", unique_aapi_residence$State.of.Residence ))
+  
+  # register_google(key = "")
+  
+  # use Google API to geolocate
+  county_plus_coordinates <- mutate_geocode(unique_aapi_counties, Counties)
+  birth_plus_coordinates <- mutate_geocode(unique_aapi_origin, Country.of.Birth) 
+  
+  index <- index + 1
+  year <- year + 1
+  
+  if (index == 1) {
+    break
+  }
+}
 
 # register_google(key = "")
-
-# use Google API to geolocate
-county_plus_coordinates <- mutate_geocode(unique_aapi_counties, Counties)
-birth_plus_coordinates <- mutate_geocode(unique_aapi_origin, Country.of.Birth) 
 
 
 # create new column in main aapi lpr200 file
@@ -42,14 +67,16 @@ finalsheet <- finalsheet %>% select(County.State, lon, lat, Major.Class.of.Admis
 colnames(finalsheet) <- c("CountyState", "lon", "lat", "MajorClassAdmission", "Admissions", "CountryofBirth", "originlon", "originlat")
 
 # formatting whitespace
-finalsheet$MajorClassAdmission <- gsub('//s+', '', finalsheet$MajorClassAdmission)
+finalsheet$MajorClassAdmission <- gsub(' ', '', finalsheet$MajorClassAdmission)
+finalsheet$MajorClassAdmission <- gsub('-', '', finalsheet$MajorClassAdmission)
 
 finalsheet$CountyState <- gsub(",\\s", ",", finalsheet$CountyState)
   
 finalsheet$CountyState <- gsub('Saint', 'St.', finalsheet$CountyState)
 
-# finalsheet$countycode <- ifelse(is.na(match(finalsheet$CountyState, census_GEOID_reference_$NAME)), census_GEOID_reference_$GEOID, "NA")
-# newvar <- merge(finalsheet, census_GEOID_reference_, by.x=c("CountyState"), by.y=c("NAME"))
-newvar <- left_join(finalsheet, census_GEOID_reference_, by=c("CountyState"="NAME"))
+finalsheet <- left_join(finalsheet, census_GEOID_reference., by=c("CountyState"="NAME"))
+# finalsheet <- regex_left_join(finalsheet, census_GEOID_reference., by=c("CountyState"="NAME"), ignore_case=TRUE)
 
-write.csv(finalsheet, "finalsheet.csv")
+write.csv(finalsheet, "finalsheet.csv", row.names = FALSE)
+
+# exportframe <- newvar[!is.na(newvar$GEOID), ]
